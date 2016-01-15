@@ -1,2 +1,6 @@
 # Give X windows a bit of time to stabilize
+if [ ! -f ~/.devsetup.ran ]; then
+    notice "Please Wait" "Development Setup will run shortly."
+fi
+
 sleep 5

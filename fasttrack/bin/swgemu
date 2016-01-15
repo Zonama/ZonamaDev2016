@@ -39,13 +39,14 @@ main() {
     case $cmd in
 	'backup' ) server_backup ;;
 	'build' ) server_build ;;
-	'latest' ) server_latest $@ ;;
-	'send' ) server_send $@ ;;
+	'latest' ) server_latest "$@" ;;
+	'postdebug' ) post_debug "$@";;
+	'send' ) server_send "$@" ;;
 	'start' ) server_start ;;
 	'status' ) server_status ;;
 	'stop' ) server_stop;;
 	'version' ) show_version;;
-	* ) echo "Usage: $0 {backup|build|latest|send|start|status|stop|version}"; exit 1 ;;
+	* ) echo "Usage: $0 {backup|build|postdebug|latest|send|start|status|stop|version}"; exit 1 ;;
     esac
 
     ret=$?
@@ -395,24 +396,175 @@ show_version()
     pushd $(dirname ${BASH_SOURCE[0]}) > /dev/null
     local me=$(pwd -P)'/'$(basename ${BASH_SOURCE[0]})
     popd > /dev/null
+    local tmp=$(mktemp /tmp/swgemu-version-temp.XXXXXX)
 
-    local git_remote=$(cd ${BUILD_DIR};git ls-remote origin refs/heads/unstable | cut -f1)
-    local git_local=$(cd ${BUILD_DIR};git rev-parse refs/heads/unstable)
-    local me_md5=$(md5sum < $me|cut -d' ' -f1)
-    local zd_tag=$(cd ~/ZonamaDev;git describe --tag)
+    # Hack to avoid prompting user for pw's so they just fail instantly if not setup
+    # Nothing nicer until git 2.3 :-(
+    local tmpssh=$(mktemp ~/.swgemu-ssh-temp.XXXXXX.tmp)
+    echo 'ssh -oBatchMode=yes "$@"' > $tmpssh
+    chmod 700 "${tmpssh}"
+    export GIT_SSH="${tmpssh}"
 
-    read name url junk <<< $(cd ${BUILD_DIR};git remote -v)
+    local git_remote=$(cd ${BUILD_DIR};git ls-remote origin refs/heads/unstable 2>> ${tmp} | cut -f1)
+    local git_local=$(cd ${BUILD_DIR};git rev-parse refs/heads/unstable 2>> ${tmp})
+    local zd_tag=$(cd ~/ZonamaDev;git describe --tag 2>> ${tmp})
+    local me_md5=$(md5sum < $me|cut -d' ' -f1 2>&1)
+
+    unset GIT_SSH
+    rm -f "${tmpssh}"
+
+    read name url junk <<< $(cd ${BUILD_DIR};git remote -v 2>>${tmp})
+
+    local errors=$(tr '\r' ' ' <${tmp})
+
+    rm -f "${tmp}"
 
     local json="{ "
 
-	json="${json} "'"server_version":{"remote-'${name}'":"'${url}'","remote-git-tag":"'${git_remote}'","local-get-tag":"'${git_local}'","asof_isodate":"'$(date -Iseconds)'","swgemu-script":"'${me}'","swgemu-md5":"'${me_md5}'","zd-tag":"'${zd_tag}'"}'
+	json="${json} "'"server_version":{"remote-'${name}'":"'${url}'","remote-git-tag":"'${git_remote}'","local-get-tag":"'${git_local}'","asof_isodate":"'$(date -Iseconds)'","swgemu-script":"'${me}'","swgemu-md5":"'${me_md5}'","zd-tag":"'${zd_tag}'","collection_errors":"'${errors}'"}'
 	json="${json}, "'"box_buildinfo":'$(< /.swgemudev.builinfo.json)
 
     json="$json }"
 
-    # echo $json
-
     echo $json | python -m json.tool
+}
+
+post_debug()
+{
+    local title="$1"
+    local desc="$2"
+    local gori="$3"
+
+    echo -e "**\n** Post Debug Message\n**"
+
+    echo -e "** This will create a dump of numerous files and status information and post them to the internet via a github gist or an issue.\n**"
+
+    echo -e "** Attempts are made to make sure the post does not include sensitive data but we cannot 100% guarantee that sensitive data won't be posted.\n**"
+
+    echo -e "** If you're worried you can follow the prompt to post a [G]ist and DO NOT LOGIN to GitHub so your gist will be 100% annonymous.\n**"
+
+    echo -e "** By default if you do post a gist and login the gist is created as private so you can review it before sharing.\n**"
+
+    echo -e "** Most people will want to post an [I]ssue and login to github to get immediate feedback and quicker support.\n**"
+
+    if [ -z "$gori" ]; then
+	read -p 'Post a [G]ist or an [I]ssue? ' gori
+	echo
+    fi
+
+    if [ -z "$title" ]; then
+	read -p "Title: " title
+	echo
+    fi
+
+    if [ -z "$desc" ]; then
+	read -p "One-line description of your problem: " desc
+	echo
+    fi
+
+    local url=""
+
+    case $gori in
+	[Ii]* )
+	    type ghi > /dev/null 2>&1 || (set -x;sudo gem install ghi)
+
+	    if git config --get ghi.token; then
+		:
+	    else
+		echo "Please login to github to post an issue:"
+		read -p "What is your github username? " ghuser
+
+		if [ -z "$ghuser" ]; then
+		    echo "** Can't post an issues without a github account, please try again with a gist or provide your github username."
+		    echo "** ABORTED BY USER **"
+		    return 2
+		fi
+
+		ghi config --auth $ghuser
+	    fi
+	    echo "** Posting Issue..."
+	    local issue=$(ghi open --label "type/automated-help" -m "$(post_debug_body)" -- lordkator/ZonamaDev 2>&1)
+	    echo "** Looking for issue id"
+	    local issue_num=$(echo "$issue"|sed -ne '1s!^#\([0-9][0-9]*\):.*!\1!p')
+
+	    if [ -n "$issue_num" ]; then
+		echo "** Found issue #${issue_num}"
+		url="https://github.com/lordkator/ZonamaDev/issues/"${issue_num}
+	    else
+		echo -e "WARNING: Unexpected output from ghi:\n\t${issue}\n\nGET HELP!"
+	    fi
+	    ;;
+	* | [Gg]* )
+	    type gist > /dev/null 2>&1 || (set -x;sudo gem install gist)
+
+	    if [ ! -f ~/.gist ] && yorn "Would you like to use your github userid for this? "; then
+		gist --login
+	    fi
+
+	    url=$(post_debug_body | gist -p -d "swgemu postdebug - ${title}" -f "ZonamaDev/post_debug-"$(date +%s)".md" 2>&1)
+	    ;;
+    esac
+
+    if [ -z "$url" ]; then
+	echo "** WARNING: Something seems to have failed, look for clues in any errors above."
+	return 1
+    fi
+
+    echo -e "\nShare this URL to get help: ${url}"
+
+    if xset q > /dev/null 2>&1; then
+	local browser=$( (for i in chromium google-chrome chromium-browser firefox; do type -P $i; done)|head -1)
+	nohup $browser $url > /dev/null 2>&1 &
+    fi
+
+    return 0
+}
+
+post_debug_body() {
+    # The output here will be included in the post as github flavored markdown content
+    # Note: Can't be too long as it goes into the command line with ghi and thus is limited
+    #       see: xargs --show-limits < /dev/null
+    #
+    local debug_commands=(
+	"show_version"
+	"tail -5 ${HOME}/workspace/Initial_Core3_Build.log"
+	"${HOME}/bin/get_config --bash 'Zone..'"
+	"${HOME}/bin/get_config --bash 'Tre..'"
+	"${HOME}/bin/tre_check"
+	"tail -100 ${HOME}/workspace/Core3/MMOCoreORB/bin/screenlog.0"
+	"tail -100 ${HOME}/workspace/Core3/MMOCoreORB/bin/log/core3.log"
+	"uname -a"
+	"df -h"
+	"top -Hbn 1"
+    )
+
+    exec 2>&1
+    echo -e "swgemu postdebug - ${title}\n\nZonamaDev Automated Post\n\n"
+    date
+    echo -e "\nDescription: ${desc}\n\n"
+
+    # Check various status files
+    echo -e '\nStatus Files:\n```\n'
+    for i in ~/.*.ran
+    do
+       echo "$i: "$(<$i)
+    done
+
+    # Make sure commands don't try and use X windows
+    local old_display="$DISPLAY"
+    unset DISPLAY
+
+    # Commands to run and capture ouput
+    for cmd in "${debug_commands[@]}"
+    do
+	echo -e '\n```\n---\n'"${cmd}"'\n```\n'
+	eval $cmd
+    done
+    echo -e '\n```'
+
+    if [ -n "$old_display" ]; then
+	export DISPLAY="${old_display}"
+    fi
 }
 
 server_latest()
@@ -527,6 +679,6 @@ get_lock() {
     trap 'release_lock;' 0
 }
 
-main $@
+main "$@"
 
 exit 0

@@ -3,9 +3,11 @@
 # 03tzdata - Ask them if they want to configure the timezone
 #
 if [ ! -f ~/.tzdata.ran ]; then
+    sudo apt-get -y install libgnome2-perl &
+
     if yorn "The current time zone is "$(date +%Z)" on this machine.\n\nWould you like to change the time zone? "; then
 	notice "Setting Timezone" "Loading timezone setup panel."
-	sudo apt-get -y install libgnome2-perl
+	wait
 	sudo -E dpkg-reconfigure --frontend=gnome tzdata
 	notice "Timezone Set" "Timezone Set to "$(date +%Z)
     else

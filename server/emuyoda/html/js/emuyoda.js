@@ -309,7 +309,7 @@ emuYodaApp.controller('controlController', function($rootScope, $scope, $timeout
   		minutes = minutes < 10 ? '0'+minutes : minutes; //minutes before 00:10:00 add leading zero
   		seconds = seconds < 10 ? '0'+seconds : seconds; //seconds before 00:00:10 add leading zero
 		var timeStr = hours + ":" + minutes + ":" + seconds + " ";
-	//End of timestamp creation. timeStr added below in consoleAppend statements
+	    //End of timestamp creation. timeStr added below in consoleAppend statements
 
 	    if ($rootScope.authToken) {
 		auth = $rootScope.authToken;
@@ -344,7 +344,7 @@ emuYodaApp.controller('controlController', function($rootScope, $scope, $timeout
 	    };
 	} else {
 
-	//Add timestamp to console output
+	    //Add timestamp to console output
 		var dtDate = new Date();
 		var hours = dtDate.getHours();
 		var minutes = dtDate.getMinutes();
@@ -353,7 +353,7 @@ emuYodaApp.controller('controlController', function($rootScope, $scope, $timeout
   		minutes = minutes < 10 ? '0'+minutes : minutes; //minutes before 00:10:00 add leading zero
   		seconds = seconds < 10 ? '0'+seconds : seconds; //seconds before 00:00:10 add leading zero
 		var timeStr = hours + ':' + minutes + ":" + seconds + " ";
-	//End of timestamp creation. timeStr added below in consoleAppend statements
+	    //End of timestamp creation. timeStr added below in consoleAppend statements
 
 	    yodaApiService.serverCommand(cmd).then(function(data) {
 		if (data.response.output) {

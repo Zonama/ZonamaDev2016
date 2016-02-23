@@ -298,6 +298,17 @@ emuYodaApp.controller('controlController', function($rootScope, $scope, $timeout
 	if(cmd != "status") {
 	    var auth = "none";
 
+	    //Add timestamp to console output
+		var dtDate = new Date();
+		var hours = dtDate.getHours();
+		var minutes = dtDate.getMinutes();
+		var seconds = dtDate.getSeconds();
+  		hours = hours < 10 ? '0'+hours : hours; // hours before 10:00:00 add leading zero
+  		minutes = minutes < 10 ? '0'+minutes : minutes; //minutes before 00:10:00 add leading zero
+  		seconds = seconds < 10 ? '0'+seconds : seconds; //seconds before 00:00:10 add leading zero
+		var timeStr = hours + ":" + minutes + ":" + seconds + " ";
+	    //End of timestamp creation. timeStr added below in consoleAppend statements
+
 	    if ($rootScope.authToken) {
 		auth = $rootScope.authToken;
 	    }
@@ -313,33 +324,45 @@ emuYodaApp.controller('controlController', function($rootScope, $scope, $timeout
 		    var r = data.response;
 
 		    if (r.status == "OK" || r.status == "CONTINUE") {
-			$scope.consoleAppend(cmd + ">> " + r.output, "success");
+			$scope.consoleAppend(timeStr + cmd + ">> " + r.output, "success");
 		    } if (r.error) {
-			$scope.consoleAppend(cmd + ">> ERROR: " + r.error_description, "danger");
+			$scope.consoleAppend(timeStr + cmd + ">> ERROR: " + r.error_description, "danger");
 		    }
 		} else {
-		    $scope.consoleAppend(cmd + ">> ERROR: UNEXPECTED RESPONSE FORMAT: " + e.data, "danger");
+		    $scope.consoleAppend(timeStr + cmd + ">> ERROR: UNEXPECTED RESPONSE FORMAT: " + e.data, "danger");
 		}
 	    };
 
 	    $scope.ws_cmd.onclose = function () {
 		$scope.pendingCmd = "";
-		$scope.consoleAppend(cmd + ">> [Command Complete]", "success");
+		$scope.consoleAppend(timeStr + cmd + ">> [Command Complete]", "success");
 		var tmp_ws = $scope.ws_cmd;
 		delete $scope.ws_cmd;
 		tmp_ws.close();
 	    };
 	} else {
+
+	    //Add timestamp to console output
+		var dtDate = new Date();
+		var hours = dtDate.getHours();
+		var minutes = dtDate.getMinutes();
+		var seconds = dtDate.getSeconds();
+  		hours = hours < 10 ? '0'+hours : hours; // hours before 10:00:00 add leading zero
+  		minutes = minutes < 10 ? '0'+minutes : minutes; //minutes before 00:10:00 add leading zero
+  		seconds = seconds < 10 ? '0'+seconds : seconds; //seconds before 00:00:10 add leading zero
+		var timeStr = hours + ':' + minutes + ":" + seconds + " ";
+	    //End of timestamp creation. timeStr added below in consoleAppend statements
+
 	    yodaApiService.serverCommand(cmd).then(function(data) {
 		if (data.response.output) {
-		    $scope.consoleAppend(cmd + ">> " + data.response.output.replace(/\n$/, ""), "success");
+		    $scope.consoleAppend(timeStr + cmd + ">> " + data.response.output.replace(/\n$/, ""), "success");
 		} else {
-		    $scope.consoleAppend(cmd + ">> ERROR: " + data.response.error_description, "danger");
+		    $scope.consoleAppend(timeStr + cmd + ">> ERROR: " + data.response.error_description, "danger");
 		}
 		$scope.pendingCmd = "";
 		$scope.updateStatus();
 	    }).catch(function() {
-		$scope.consoleAppend(cmd + ">> ERROR: API Call Failure.", "danger");
+		$scope.consoleAppend(timeStr + cmd + ">> ERROR: API Call Failure.", "danger");
 		$scope.pendingCmd = "";
 		$scope.updateStatus();
 	    });

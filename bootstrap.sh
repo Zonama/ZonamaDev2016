@@ -201,7 +201,7 @@ check_virtualbox_win() {
     local ver=$("${VBOX_MSI_INSTALL_PATH:-${VBOX_INSTALL_PATH}}/VBoxManage" --version)
 
     case $ver in
-	5.[0-9].1[2-9]* ) : ;;
+	5.[0-9].[12-99]* ) : ;;
     * ) echo "Unsupported version of virtualbox ($ver), please upgrade to 5.0.12 or higher"
 	exit 1
 	;;

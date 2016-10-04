@@ -580,9 +580,14 @@ server_backup() {
 
     STAMP=$(date -d@${NOW} '+%Y%m%d%H%M%S%Z')
 
-    BUFILE=${BUDIR}/swgemu-backup-${STAMP}.tar.gz
-
-    BULOG=${BUDIR}/swgemu-backup-${STAMP}.log
+    if ! [ $prerest == true ]; then
+        BUFILE=${BUDIR}/swgemu-backup-${STAMP}.tar.gz
+        BULOG=${BUDIR}/swgemu-backup-${STAMP}.log
+    else
+        BUFILE=${BUDIR}/swgemu-backup-prerestore.tar.gz
+        BULOG=${BUDIR}/swgemu-backup-prerestore.log
+        prerest=false
+    fi
 
     local bustat=$(mktemp /tmp/swgemu-backup-status.XXXXXX)
 
@@ -604,6 +609,7 @@ server_backup() {
         cd "${RUN_DIR}"
 
         # TODO do we need the __db files if the db is closed?
+        # Reoze answered this in #dev yesterday; <+Reoze> yes you do / learned that the hard way
         cp -rv databases log conf custom_scripts ${TMPDIR}/bin/
 
         # Copy anything that has been modified in scripts/* dir
@@ -702,6 +708,9 @@ server_restore()
     fi
 
     #TODO - Should call server_backup maybe with a flag to use a special name like "prerestore" or something
+    #WIP - create a prerestore backup in case things get messed up
+    prerest=true
+    server_backup
 
     echo "** RESTORING " ${last_bu}" **"
     local restat=$(mktemp /tmp/swgemu-recovery-status.XXXXXX)
@@ -737,6 +746,8 @@ server_restore()
     fi
 
     echo "** BACKUP SUCCESSFULLY RECOVERED **"
+    cd $BUDIR
+    rm -fr *prerestore*
 
     if yorn "Would you like to restart the server?"; then
         echo "** STARTING SERVER **"

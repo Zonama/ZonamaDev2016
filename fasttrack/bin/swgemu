@@ -30,10 +30,12 @@ main() {
 
     case $cmd in
         'backup' )      server_backup   "$@";;
+        'backup_chooser' )  server_backup_chooser   "$@";;
         'build' )       server_build    "$@";;
         'latest' )      server_latest   "$@";;
         'postdebug' )   post_debug      "$@";;
         'send' )        server_send     "$@";;
+        'restore' )     server_restore	"$0";;
         'start' )       server_start    "$@";;
         'status' )      server_status   "$@";;
         'stop' )        server_stop     "$@";;
@@ -655,6 +657,93 @@ server_backup() {
     fi
 
     return 0
+}
+
+server_backup_chooser()
+{
+    cd ~/server/swgemu/backups/
+
+    options=( $(find -maxdepth 1 -name "*tar.gz" -printf "%f\n" | sort | xargs -0) )
+    prompt="Please select a file:"
+
+    PS3=$'\n'"$prompt "
+    select opt in "${options[@]}" "Quit" ; do
+        echo $opt
+        exit
+    done
+}
+
+server_restore()
+{
+    BUDIR=~/server/swgemu/backups
+
+    if server_status; then
+        echo "** SERVER IS RUNNING **"
+
+        if yorn "Would you like to shutdown the server first?"; then
+            server_stop
+        else
+            echo "** USER ABORTED RESTORE **"
+            return 12
+        fi
+   fi
+
+    last_bu=$BUDIR/$(server_backup_chooser)
+    local bu_filename=$(basename "${last_bu}")
+
+    if [ "${bu_filename}" == "Quit" ]; then
+        echo "** USER ABORTED RESTORE **"
+        return 12
+    elif yorn "Would you like to restore "${bu_filename}"?"; then
+        :
+    else
+        echo "** USER ABORTED RESTORE **"
+        exit
+    fi
+
+    #TODO - Should call server_backup maybe with a flag to use a special name like "prerestore" or something
+
+    echo "** RESTORING " ${last_bu}" **"
+    local restat=$(mktemp /tmp/swgemu-recovery-status.XXXXXX)
+
+    (
+        trap 'st=$?;echo "$st" > "'"${restat}"'";echo "** UNEXPECTED EXIT=$st, CANNOT RESTORE **"' 0
+
+	    echo 254 > "${restat}"
+
+        set -e
+        cd "${RUN_DIR}"
+        rm -fr databases && mkdir databases
+
+        cd "${RUN_DIR}/.."
+        tar xvf $last_bu
+
+        mysql -e 'DROP DATABASE swgemu'
+        mysql -e 'CREATE DATABASE swgemu'
+        mysql swgemu < mysqldump.sql
+
+        trap - 0
+
+    echo 0 > "${restat}"
+    )
+
+    local res=$(<"${restat}")
+
+    rm -f "${restat}"
+
+    if [[ $res -ne 0 ]]; then
+	    echo "** ERROR: Backup failed with status ${res} **"
+	    return ${res}
+    fi
+
+    echo "** BACKUP SUCCESSFULLY RECOVERED **"
+
+    if yorn "Would you like to restart the server?"; then
+        echo "** STARTING SERVER **"
+        server_start
+    else
+        echo "** SERVER IS STOPPED **"
+    fi
 }
 
 show_version()

@@ -30,7 +30,6 @@ main() {
 
     case $cmd in
         'backup' )      server_backup   "$@";;
-        'backup_chooser' )  server_backup_chooser   "$@";;
         'build' )       server_build    "$@";;
         'latest' )      server_latest   "$@";;
         'postdebug' )   post_debug      "$@";;
@@ -528,10 +527,13 @@ server_update_ip() {
 server_backup() {
     local autobackup=false
     local restartserver=false
+    local prerest=''
 
     if [ "X$1" = "X--auto" ]; then
         autobackup=true
         shift
+    elif [ "X$1" = "X--tag" ]; then
+        prerest="$2"
     fi
 
     if server_status; then
@@ -570,8 +572,6 @@ server_backup() {
 
     # NOTE: not the most space efficent way to do it but will work as it's simple for people to understand the format
 
-    BUDIR=~/server/swgemu/backups
-
     mkdir -p ${BUDIR} 2> /dev/null && echo "** Created ${BUDIR} directory **"
 
     TMPDIR=$(mktemp -d ${BUDIR}/swgemu-backup-temp.XXXXXX)
@@ -580,13 +580,12 @@ server_backup() {
 
     STAMP=$(date -d@${NOW} '+%Y%m%d%H%M%S%Z')
 
-    if ! [ $prerest == true ]; then
+    if [ -z $prerest ]; then
         BUFILE=${BUDIR}/swgemu-backup-${STAMP}.tar.gz
         BULOG=${BUDIR}/swgemu-backup-${STAMP}.log
     else
-        BUFILE=${BUDIR}/swgemu-backup-prerestore.tar.gz
-        BULOG=${BUDIR}/swgemu-backup-prerestore.log
-        prerest=false
+        BUFILE=${BUDIR}/swgemu-backup-${STAMP}-${prerest}.tar.gz
+        BULOG=${BUDIR}/swgemu-backup-${STAMP}-${prerest}.log
     fi
 
     local bustat=$(mktemp /tmp/swgemu-backup-status.XXXXXX)
@@ -608,8 +607,6 @@ server_backup() {
 
         cd "${RUN_DIR}"
 
-        # TODO do we need the __db files if the db is closed?
-        # Reoze answered this in #dev yesterday; <+Reoze> yes you do / learned that the hard way
         cp -rv databases log conf custom_scripts ${TMPDIR}/bin/
 
         # Copy anything that has been modified in scripts/* dir
@@ -667,50 +664,54 @@ server_backup() {
 
 server_backup_chooser()
 {
-    cd ~/server/swgemu/backups/
+    local choice=''
+    cd ${BUDIR}
 
-    options=( $(find -maxdepth 1 -name "*tar.gz" -printf "%f\n" | sort | xargs -0) )
+    options=( $(cd "${BUDIR}";ls -r *.tar.gz) )
+
+
     prompt="Please select a file:"
 
     PS3=$'\n'"$prompt "
     select opt in "${options[@]}" "Quit" ; do
-        echo $opt
+        choice=$opt
+        echo $choice
         exit
+        #TODO return JSON for IS_API_CALL and yoda
     done
 }
 
 server_restore()
 {
-    BUDIR=~/server/swgemu/backups
+    last_bu=$(server_backup_chooser)
+
+    if [ "${last_bu}" == "Quit" -o -z "${last_bu}" ]; then
+        echo "** USER QUIT OR CANNOT LOCATE BACKUP FILE. EXITING **"
+        return 13
+    else
+        local bu_filename=$(basename "${last_bu}")
+    fi
 
     if server_status; then
         echo "** SERVER IS RUNNING **"
 
         if yorn "Would you like to shutdown the server first?"; then
             server_stop
+            :
         else
             echo "** USER ABORTED RESTORE **"
-            return 12
+            return 14
         fi
-   fi
+    fi
 
-    last_bu=$BUDIR/$(server_backup_chooser)
-    local bu_filename=$(basename "${last_bu}")
-
-    if [ "${bu_filename}" == "Quit" ]; then
-        echo "** USER ABORTED RESTORE **"
-        return 12
-    elif yorn "Would you like to restore "${bu_filename}"?"; then
+    if yorn "Would you like to restore "${bu_filename}"?"; then
         :
     else
         echo "** USER ABORTED RESTORE **"
-        exit
+        return 15
     fi
 
-    #TODO - Should call server_backup maybe with a flag to use a special name like "prerestore" or something
-    #WIP - create a prerestore backup in case things get messed up
-    prerest=true
-    server_backup
+    server_backup --tag "pre_restore_backup" 
 
     echo "** RESTORING " ${last_bu}" **"
     local restat=$(mktemp /tmp/swgemu-recovery-status.XXXXXX)
@@ -718,14 +719,14 @@ server_restore()
     (
         trap 'st=$?;echo "$st" > "'"${restat}"'";echo "** UNEXPECTED EXIT=$st, CANNOT RESTORE **"' 0
 
-	    echo 254 > "${restat}"
+        echo 254 > "${restat}"
 
         set -e
         cd "${RUN_DIR}"
         rm -fr databases && mkdir databases
 
         cd "${RUN_DIR}/.."
-        tar xvf $last_bu
+        tar xvf $BUDIR/$last_bu
 
         mysql -e 'DROP DATABASE swgemu'
         mysql -e 'CREATE DATABASE swgemu'
@@ -733,21 +734,20 @@ server_restore()
 
         trap - 0
 
-    echo 0 > "${restat}"
+        echo 0 > "${restat}"
     )
 
-    local res=$(<"${restat}")
+    local ret=$(<"${restat}")
 
     rm -f "${restat}"
 
-    if [[ $res -ne 0 ]]; then
+    if [[ $ret -ne 0 ]]; then
 	    echo "** ERROR: Backup failed with status ${res} **"
-	    return ${res}
+	    return ${ret}
     fi
 
-    echo "** BACKUP SUCCESSFULLY RECOVERED **"
+    echo "** BACKUP SUCCESSFULLY RESTORED **"
     cd $BUDIR
-    rm -fr *prerestore*
 
     if yorn "Would you like to restart the server?"; then
         echo "** STARTING SERVER **"

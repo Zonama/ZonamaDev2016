@@ -34,7 +34,7 @@ main() {
         'latest' )      server_latest   "$@";;
         'postdebug' )   post_debug      "$@";;
         'send' )        server_send     "$@";;
-        'restore' )     server_restore	"$0";;
+        'restore' )     server_restore  "$0";;
         'start' )       server_start    "$@";;
         'status' )      server_status   "$@";;
         'stop' )        server_stop     "$@";;

@@ -40,7 +40,7 @@ main() {
         'stop' )        server_stop     "$@";;
         'reset_ip' | 'resetip' | 'reset-ip' )    reset_server_ip "$@";;
         'version' )     show_version    "$@";;
-        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|start|status|stop|reset_ip|version]"; return 1 ;;
+        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|restore|start|status|stop|reset_ip|version]"; return 1 ;;
     esac
 
     ret=$?

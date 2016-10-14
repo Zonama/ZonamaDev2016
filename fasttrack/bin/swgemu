@@ -34,12 +34,14 @@ main() {
         'latest' )      server_latest   "$@";;
         'postdebug' )   post_debug      "$@";;
         'send' )        server_send     "$@";;
+        'restore' )     server_restore  "$@";;
+        'runUnitTests' )    server_runUnitTests "$@";;
         'start' )       server_start    "$@";;
         'status' )      server_status   "$@";;
         'stop' )        server_stop     "$@";;
         'reset_ip' | 'resetip' | 'reset-ip' )    reset_server_ip "$@";;
         'version' )     show_version    "$@";;
-        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|start|status|stop|reset_ip|version]"; return 1 ;;
+        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|restore|runUnitTests|start|status|stop|reset_ip|version]"; return 1 ;;
     esac
 
     ret=$?
@@ -527,10 +529,18 @@ server_backup() {
     local autobackup=false
     local restartserver=false
 
-    if [ "X$1" = "X--auto" ]; then
-        autobackup=true
-        shift
-    fi
+    local user_tag=''
+
+    while [ -n "$1" ]
+    do
+        if [ "X$1" = "X--auto" ]; then
+            autobackup=true
+            shift
+        elif [ "X$1" = "X--tag" ]; then
+            user_tag="$2"
+            shift; shift;
+        fi
+    done
 
     if server_status; then
         echo "** Server is running **"
@@ -568,8 +578,6 @@ server_backup() {
 
     # NOTE: not the most space efficent way to do it but will work as it's simple for people to understand the format
 
-    BUDIR=~/server/swgemu/backups
-
     mkdir -p ${BUDIR} 2> /dev/null && echo "** Created ${BUDIR} directory **"
 
     TMPDIR=$(mktemp -d ${BUDIR}/swgemu-backup-temp.XXXXXX)
@@ -578,9 +586,8 @@ server_backup() {
 
     STAMP=$(date -d@${NOW} '+%Y%m%d%H%M%S%Z')
 
-    BUFILE=${BUDIR}/swgemu-backup-${STAMP}.tar.gz
-
-    BULOG=${BUDIR}/swgemu-backup-${STAMP}.log
+    BUFILE=${BUDIR}/swgemu-backup-${STAMP}"${user_tag}".tar.gz
+    BULOG=${BUDIR}/swgemu-backup-${STAMP}"${user_tag}".log
 
     local bustat=$(mktemp /tmp/swgemu-backup-status.XXXXXX)
 
@@ -601,7 +608,6 @@ server_backup() {
 
         cd "${RUN_DIR}"
 
-        # TODO do we need the __db files if the db is closed?
         cp -rv databases log conf custom_scripts ${TMPDIR}/bin/
 
         # Copy anything that has been modified in scripts/* dir
@@ -655,6 +661,117 @@ server_backup() {
     fi
 
     return 0
+}
+
+server_backup_chooser()
+{
+    local choice=''
+    cd ${BUDIR}
+
+    options=( $(cd "${BUDIR}";ls -r *.tar.gz) )
+
+    prompt="Please select a file:"
+
+    PS3=$'\n'"$prompt "
+    select choice in "${options[@]}" "Quit" ; do
+        echo $choice
+        exit
+        #TODO return JSON for IS_API_CALL and yoda
+    done
+}
+
+server_restore()
+{
+    last_bu=$(server_backup_chooser)
+
+    if [ "${last_bu}" == "Quit" -o -z "${last_bu}" ]; then
+        echo "** USER QUIT OR CANNOT LOCATE BACKUP FILE. EXITING **"
+        return 13
+    else
+        local bu_filename=$(basename "${last_bu}")
+    fi
+
+    if server_status; then
+        echo "** SERVER IS RUNNING **"
+
+        if yorn "Would you like to shutdown the server first?"; then
+            server_stop
+            :
+        else
+            echo "** USER ABORTED RESTORE **"
+            return 14
+        fi
+    fi
+
+    if yorn "Would you like to restore "${bu_filename}"?"; then
+        :
+    else
+        echo "** USER ABORTED RESTORE **"
+        return 15
+    fi
+
+    server_backup --tag "pre_restore_backup" 
+
+    echo "** RESTORING "${last_bu}" **"
+    local restat=$(mktemp /tmp/swgemu-recovery-status.XXXXXX)
+
+    (
+        trap 'st=$?;echo "$st" > "'"${restat}"'";echo "** UNEXPECTED EXIT=$st, CANNOT RESTORE **"' 0
+
+        echo 254 > "${restat}"
+
+        set -e
+        cd "${RUN_DIR}"
+        rm -fr databases && mkdir databases
+
+        cd "${RUN_DIR}/.."
+        tar xvf "${BUDIR}/${last_bu}"
+
+        mysql -e 'DROP DATABASE swgemu'
+        mysql -e 'CREATE DATABASE swgemu'
+        mysql swgemu < mysqldump.sql
+
+        trap - 0
+
+        echo 0 > "${restat}"
+    )
+
+    local ret=$(<"${restat}")
+
+    rm -f "${restat}"
+
+    if [[ $ret -ne 0 ]]; then
+	    echo "** ERROR: Backup failed with status ${res} **"
+	    return ${ret}
+    fi
+
+    echo "** BACKUP SUCCESSFULLY RESTORED **"
+    cd $BUDIR
+
+    if yorn "Would you like to restart the server?"; then
+        echo "** STARTING SERVER **"
+        server_start
+    else
+        echo "** SERVER IS STOPPED **"
+    fi
+}
+
+server_runUnitTests()
+{
+    cd "${RUN_DIR}"
+
+    local user_tag=''
+    user_tag="$1"
+
+    if [ -z "${user_tag}" ]; then
+        echo "${user_tag}"        
+        #./core3 runUnitTests
+        shift;
+        return
+    else
+        ./core3 runUnitTests --gtest_filter="${user_tag}"
+        return
+    fi
 }
 
 show_version()

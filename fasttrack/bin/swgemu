@@ -764,12 +764,12 @@ server_runUnitTests()
     user_tag="$1"
 
     if [ -z "${user_tag}" ]; then
-        echo "${user_tag}"        
-        #./core3 runUnitTests
+        ./core3 runUnitTests
         shift;
         return
     else
         ./core3 runUnitTests --gtest_filter="${user_tag}"
+        shift;
         return
     fi
 }

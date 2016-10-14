@@ -34,13 +34,14 @@ main() {
         'latest' )      server_latest   "$@";;
         'postdebug' )   post_debug      "$@";;
         'send' )        server_send     "$@";;
-        'restore' )     server_restore  "$0";;
+        'restore' )     server_restore  "$@";;
+        'runUnitTests' )    server_runUnitTests "$@";;
         'start' )       server_start    "$@";;
         'status' )      server_status   "$@";;
         'stop' )        server_stop     "$@";;
         'reset_ip' | 'resetip' | 'reset-ip' )    reset_server_ip "$@";;
         'version' )     show_version    "$@";;
-        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|restore|start|status|stop|reset_ip|version]"; return 1 ;;
+        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|restore|runUnitTests|start|status|stop|reset_ip|version]"; return 1 ;;
     esac
 
     ret=$?
@@ -752,6 +753,24 @@ server_restore()
         server_start
     else
         echo "** SERVER IS STOPPED **"
+    fi
+}
+
+server_runUnitTests()
+{
+    cd "${RUN_DIR}"
+
+    local user_tag=''
+    user_tag="$1"
+
+    if [ -z "${user_tag}" ]; then
+        echo "${user_tag}"        
+        #./core3 runUnitTests
+        shift;
+        return
+    else
+        ./core3 runUnitTests --gtest_filter="${user_tag}"
+        return
     fi
 }
 

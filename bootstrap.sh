@@ -144,12 +144,13 @@ install_git_linux() {
 }
 
 check_gitbash_win() {
-    case $BASH_VERSION in
-	4.[3-9]* ) : ;;
-	* ) echo "Unsupported version of BASH (${BASH_VERSION}), please upgrade to BASH 4.3.x+"
-	    exit 1
-	    ;;
-    esac
+    local ver_min="4.3.0"
+    local ver=$("${vbm}" --version)
+
+    if version_error "${ver_min}" "${BASH_VERSION}"; then
+	echo "Unsupported version of BASH (${BASH_VERSION}), please upgrade to BASH 4.3.x+"
+	exit 1
+    fi
 
     for i in tty mktemp sed scp ssh find cygpath
     do
@@ -168,6 +169,7 @@ check_gitbash_win() {
 }
 
 check_virtualbox_win() {
+    local ver_min="5.0.12"
     local ve=$(wmic cpu get VirtualizationFirmwareEnabled/value | grep TRUE)
 
     if [ -z "$ve" ]; then
@@ -200,21 +202,20 @@ check_virtualbox_win() {
 
     local ver=$("${VBOX_MSI_INSTALL_PATH:-${VBOX_INSTALL_PATH}}/VBoxManage" --version)
 
-    case $ver in
-	5.[0-9].1[2-9]* | 5.[0-9].[2-9]* ) : ;;
-    * ) echo "Unsupported version of virtualbox ($ver), please upgrade to 5.0.12 or higher"
+    if version_error "${ver_min}" "${ver}"; then
+        echo "Unsupported version of virtualbox ($ver), please upgrade to ${ver_min} or higher"
 	exit 1
-	;;
-esac
+    fi
 
-echo "** Virtualbox version $ver **"
+    echo "** Virtualbox version $ver **"
 }
 
 check_virtualbox_linux() {
+    local ver_min="5.0.12"
     local vbm=$(type -P VBoxManage)
 
     if [ -z "${vbm}" ]; then
-	echo -e "** You need to install VirtualBox for Linux **\n"
+        echo -e "** You need to install VirtualBox (${ver_min} or higher) for Linux **\n"
 
 	echo -e '** Please go to https://www.virtualbox.org/wiki/Linux_Downloads and follow directions there to install virtualbox'
 
@@ -225,21 +226,44 @@ check_virtualbox_linux() {
 
     local ver=$("${vbm}" --version)
 
-    case $ver in
-	5.[0-9].1[2-9]* | 5.[0-9].[2-9]* ) : ;;
-	* ) echo "Unsupported version of virtualbox ($ver), please upgrade to 5.0.12 or higher"
-	    exit 1
-	    ;;
-    esac
+    if version_error "${ver_min}" "${ver}"; then
+        echo "Unsupported version of virtualbox ($ver), please upgrade to ${ver_min} or higher"
+	exit 1
+    fi
 
     echo "** Virtualbox version $ver **"
 }
 
-check_vagrant_win() {
+check_virtualbox_osx() {
+    local ver_min="5.0.12"
+    local vbm=$(type -P VBoxManage)
+
+    if [ -z "${vbm}" ]; then
+        echo -e "** You need to install VirtualBox (${ver_min} or higher) for OSX**\n"
+
+	echo -e '** Please go to https://www.virtualbox.org/wiki/Linux_Downloads and follow directions there to install virtualbox'
+
+	echo -e '** After you have virtualbox installed re-try this command.'
+
+	exit 1
+    fi
+
+    local ver=$("${vbm}" --version)
+
+    if version_error "${ver_min}" "${ver}"; then
+        echo "Unsupported version of virtualbox ($ver), please upgrade to ${ver_min} or higher"
+	exit 1
+    fi
+
+    echo "** Virtualbox version $ver **"
+}
+
+check_vagrant_base() {
+    local ver_min="1.8.1"
     local ver=$(vagrant --version | cut -d' ' -f2 2> /dev/null)
 
     if [ -z "$ver" ]; then
-	echo -e "** You need to install Vagrant **\n"
+	echo -e "** You need to install Vagrant ${ver_min} or higher **\n"
 
 	if yorn "Would you like me to take you to: https://www.vagrantup.com/downloads.html?"; then
 	    explorer "https://www.vagrantup.com/downloads.html"
@@ -249,23 +273,26 @@ check_vagrant_win() {
 	exit 1
     fi
 
-    case $ver in
-	1.[8-9].[1-9]* ) : ;;
-	* ) echo "Unsupported version of Vagrant ($ver), please upgrade to v1.8.1 or higher"
-	    exit 2
-	    ;;
-    esac
+    if version_error "${ver_min}" "${ver}"; then
+	echo "Unsupported version of Vagrant ($ver), please upgrade to v${ver_min} or higher"
+        exit 1
+    fi
 
     echo "** Vagrant version $ver **"
 }
 
+check_vagrant_win() {
+    check_vagrant_base
+    return $?
+}
+
 check_vagrant_osx() {
-    check_vagrant_win
+    check_vagrant_base
     return $?
 }
 
 check_vagrant_linux() {
-    check_vagrant_win
+    check_vagrant_base
 
     local dp=$(type -P dpkg)
 
@@ -357,6 +384,36 @@ yorn() {
   fi
 
   return 0
+}
+
+version_error() {
+    local want="$1"
+    local have="$2"
+
+    read have_maj have_min have_sub have_misc <<<${have//[^0-9]/ }
+    read want_maj want_min want_sub want_misc <<<${want//[^0-9]/ }
+
+    if [ "${have_maj}" -lt "${want_maj}" ]; then
+        return 0
+    fi
+
+    if [ "${have_maj}" -gt "${want_maj}" ]; then
+        return 1
+    fi
+
+    if [ "${have_min}" -gt "${want_min}" ]; then
+        return 2
+    fi
+
+    if [ "${have_sub}" -gt "${want_sub}" ]; then
+        return 3
+    fi
+
+    if [ "${have_maj}" -eq "${want_maj}" -a "${have_min}" -eq "${want_min}" -a "${have_sub}" -eq "${want_sub}" ]; then
+        return 4
+    fi
+
+    return 0
 }
 
 main "$@" < /dev/tty

@@ -15,7 +15,7 @@ IS_API_CALL=false
 
 main() {
     local ret=255
-    local cmd=$1
+    local cmd=$(echo $1 | tr '[:upper:]' '[:lower:]')
     shift
 
     if is_setup_pending "$cmd"; then
@@ -29,18 +29,19 @@ main() {
     fi
 
     case $cmd in
-        'backup' )      server_backup   "$@";;
-        'build' )       server_build    "$@";;
-        'latest' )      server_latest   "$@";;
-        'postdebug' )   post_debug      "$@";;
-        'send' )        server_send     "$@";;
-        'restore' )     server_restore  "$0";;
-        'start' )       server_start    "$@";;
-        'status' )      server_status   "$@";;
-        'stop' )        server_stop     "$@";;
+        'backup' )       server_backup       "$@";;
+        'build' )        server_build        "$@";;
+        'latest' )       server_latest       "$@";;
+        'postdebug' )    post_debug          "$@";;
+        'send' )         server_send         "$@";;
+        'restore' )      server_restore      "$@";;
+        'rununittests' ) server_rununittests "$@";;
+        'start' )        server_start        "$@";;
+        'status' )       server_status       "$@";;
+        'stop' )         server_stop         "$@";;
         'reset_ip' | 'resetip' | 'reset-ip' )    reset_server_ip "$@";;
-        'version' )     show_version    "$@";;
-        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|restore|start|status|stop|reset_ip|version]"; return 1 ;;
+        'version' )      show_version        "$@";;
+        'help' | * ) echo "Usage: $0 [backup|build|postdebug|latest|send|restore|runUnitTests|start|status|stop|reset_ip|version]"; return 1 ;;
     esac
 
     ret=$?
@@ -365,7 +366,7 @@ server_build() {
 
     cd "${BUILD_DIR}"
 
-    local extra="$*"
+    local extra=""
 
     local bdb_ver=$(sed -ne '/.*-ldb-\([0-9.]*\).*/s//\1/p' src/Makefile.am)
 
@@ -536,7 +537,7 @@ server_backup() {
             autobackup=true
             shift
         elif [ "X$1" = "X--tag" ]; then
-            user_tag="$2"
+            user_tag="-$2"
             shift; shift;
         fi
     done
@@ -755,6 +756,17 @@ server_restore()
     fi
 }
 
+server_rununittests()
+{
+    local filter='*'
+
+    if [ -n "$1" ]; then
+        filter="$1"
+    fi
+
+    (set -x; cd "${RUN_DIR}"; ./core3 runUnitTests --gtest_filter="${filter}")
+}
+
 show_version()
 {
     pushd $(dirname ${BASH_SOURCE[0]}) > /dev/null
@@ -961,9 +973,16 @@ server_latest()
     (
         set -xe
         cd "${BUILD_DIR}"
-        git stash save "swgemu-latest $(date)"
-        git pull
-        git stash pop
+        git rm -f build/unix/Makefile build/unix/config.h build/unix/config.status || true
+        git checkout HEAD -- Makefile.in aclocal.m4 config.h.in configure src/client/Makefile.in src/client/aclocal.m4 src/client/config.h.in src/client/configure build/unix
+        local have_changes=$(git status --porcelain --untracked-files=no | wc -l)
+        if [ $have_changes -gt 0 ]; then
+            git stash save "swgemu-latest $(date)"
+            git pull
+            git stash pop
+        else
+            git pull
+        fi
         cd "${WORKSPACE}/PublicEngine"
         git pull
 	rm -f "${BUILD_DIR}/build/unix/config.log"

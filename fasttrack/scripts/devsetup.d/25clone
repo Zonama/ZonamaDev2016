@@ -153,11 +153,22 @@ make_links() {
     echo "Using engine library: $(readlink $englib)"
 }
 
+setup_gitattributes() {
+    local gafile="${WORKSPACE}/Core3/MMOCoreORB/bin/conf/.gitattributes"
+
+    if [ ! -f "${gafile}" ]; then
+	notice "Git Attributes" "config.lua now set to merge=union by default using ${gafile}"
+        echo 'config.lua merge=union' > "${gafile}"
+    fi
+}
+
 pushd $WORKSPACE
 
     clone_repos
 
     check_repos
+
+    setup_gitattributes
 
     make_links
 

@@ -973,8 +973,8 @@ server_latest()
     (
         set -xe
         cd "${BUILD_DIR}"
-        git rm -f build/unix/Makefile build/unix/config.h build/unix/config.status || true
-        git checkout HEAD -- Makefile.in aclocal.m4 config.h.in configure src/client/Makefile.in src/client/aclocal.m4 src/client/config.h.in src/client/configure build/unix
+        git rm -f --ignore-unmatch build/unix/Makefile build/unix/config.h build/unix/config.status || true
+        git checkout HEAD -- Makefile.in aclocal.m4 config.h.in configure src/client/Makefile.in src/client/aclocal.m4 src/client/config.h.in src/client/configure build/unix || true
         local have_changes=$(git status --porcelain --untracked-files=no | wc -l)
         if [ $have_changes -gt 0 ]; then
             git stash save "swgemu-latest $(date)"

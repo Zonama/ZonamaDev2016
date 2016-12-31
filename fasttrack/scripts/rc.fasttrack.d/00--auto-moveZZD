@@ -1,0 +1,13 @@
+#!/bin/bash
+moveZZD() {
+  (set -x;cd "${ZDHOME}/ZonamaDev"
+  read ot ou <<<$(git describe --tag;git ls-remote --get-url)
+  mv server/emuyoda/yoda-config.lua ~/
+  sudo -u ${ZDUSER} -i /bin/bash -xc "cd ZonamaDev;git remote set-url origin https://github.com/Zonama/ZonamaDev;git remote -v;git fetch;git checkout master;git reset --hard origin/master && git clean -dfx"
+  mv ~/yoda-config.lua server/emuyoda/yoda-config.lua
+  read nt nu <<<$(git describe --tag;git ls-remote --get-url)
+  curl -Gs "http://downloads.zonamaserver.org/zonamadev/giturl.txt?x-ztype=zd&x-event=moveZZD&x-uuid=$(/usr/sbin/dmidecode -s system-uuid)&x-version=$(cat /.swgemudev.version)&x-id=$(cat /var/lib/dbus/machine-id)&x-old-tag=${ot}&x-new-tag=${nt}" --data-urlencode "x-old-url=${ou}" --data-urlencode "x-new-url=${nu}"
+  rm -f '/.swgemudev.update')
+}
+fgrep -q 'lordkator/ZonamaDev' /.swgemudev.update && moveZZD
+# NOTE: Keep size < 1000 bytes to avoid bash issues with reset --hard

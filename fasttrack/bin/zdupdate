@@ -44,6 +44,11 @@ update_zd() {
     alert "Updated ZonamaDev" "Updated to ${tag}" 0
 }
 
+moveZZD() {
+    unset ME CHECK_STATUS
+    exec sudo ${HOME}/ZonamaDev/fasttrack/scripts/rc.fasttrack > /tmp/zdupdate-moveZZD.out 2>&1
+}
+
 getgiturl() {
     export ZDGITURL=$(curl -s http://downloads.lordkator.com/swgemudev/giturl.txt'?x-zdupdate='"${1}"'&x-uuid='$(sudo /usr/sbin/dmidecode -s system-uuid)'&x-version='$(cat /.swgemudev.version)'&x-zd-version='$(git describe --tag)'&x-id='$(cat /var/lib/dbus/machine-id))
 }
@@ -119,6 +124,8 @@ do
 	VERBOSE=true
     fi
 done
+
+sudo cat /.swgemudev.update | fgrep -q 'lordkator/ZonamaDev' && moveZZD
 
 if ! check_update "$@"; then
     echo "** Out of date"

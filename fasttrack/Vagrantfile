@@ -128,7 +128,8 @@ Vagrant.configure(2) do |config|
 
       if provider == "virtualbox"
         # Hint at a bigger video config
-        v.customize ["modifyvm", :id, "--accelerate3d", "on"]
+        v.customize ["modifyvm", :id, "--accelerate3d", "off"]
+        v.customize ["modifyvm", :id, "--accelerate2dvideo", "on"]
         v.customize ["modifyvm", :id, "--vram", "128"]
         v.customize 'post-boot', ["controlvm", :id, "setvideomodehint", "1280", "720", "24"]
         # TODO need to test this more and see if we can optimize the network more, for now ethtool -i eth0 gro off seems to help
